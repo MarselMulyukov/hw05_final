@@ -68,14 +68,6 @@ class PostFormTests(TestCase):
         self.assertEqual(Post.objects.count(), posts_count + 1)
         # Проверяем, что создалась запись с нашим слагом
         self.assertTrue(Post.objects.filter(image="posts/small.gif").exists())
-        #form_data_error = {
-        #   'text': 'Тестовый текст',
-        #   'image': "text",
-        #}
-        #response_error = self.authorized_client.post(
-        #    reverse("posts:new-post"), data=form_data_error, follow=True)
-        #print(response_error.context[""])
-        #self.assertFormError(response_error, response_error.context["form_data_error"], "image", "низзя")
 
     def test_edit_post(self):
         """Валидная форма изменяет запись в Post."""

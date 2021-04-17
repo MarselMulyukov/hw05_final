@@ -23,7 +23,11 @@ class Post(models.Model):
                               on_delete=models.SET_NULL,
                               blank=True, null=True, related_name="posts",
                               help_text="Выберите группу")
-    image = models.ImageField(upload_to="posts/", blank=True, null=True)
+    image = models.ImageField(verbose_name="Изображение",
+                              help_text="Загрузить изображение",
+                              upload_to="posts/",
+                              blank=True,
+                              null=True)
 
     def __str__(self):
         return self.text[:15]
@@ -53,3 +57,8 @@ class Follow(models.Model):
                              related_name="follower")
     author = models.ForeignKey(User, on_delete=models.CASCADE,
                                related_name="following")
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=["user", "author"],
+                                    name="unique_following"), ]

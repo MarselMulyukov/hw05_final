@@ -44,10 +44,10 @@ def profile(request, username):
     page_number = request.GET.get("page")
     page = paginator.get_page(page_number)
     if request.user.username:
-        following = True if Follow.objects.filter(user=request.user,
-                                                  author=author) else None
+        following = Follow.objects.filter(user=request.user,
+                                          author=author).exists()
     else:
-        following = None
+        following = False
     followers = author.following.all().count()
     followings = author.follower.all().count()
     return render(
@@ -70,10 +70,10 @@ def post_view(request, username, post_id):
     post_list = author.posts.all()
     post_count = post_list.count()
     if request.user.username:
-        following = True if Follow.objects.filter(user=request.user,
-                                                  author=author) else None
+        following = Follow.objects.filter(user=request.user,
+                                          author=author).exists()
     else:
-        following = None
+        following = False
     followers = author.following.all().count()
     followings = author.follower.all().count()
     return render(
@@ -162,10 +162,9 @@ def add_comment(request, username, post_id):
 def follow_index(request):
     # информация о текущем пользователе доступна в переменной request.user
     user = get_object_or_404(User, username=request.user)
-    # делаем запрос об авторах на кого подписан пользователь
-    follows = user.follower.all()
-    authors = [follow.author for follow in follows]
-    post_list = Post.objects.filter(author__in=authors).order_by("-pub_date")
+    # фильтруем посты по принадлежности избранным авторам и сортируем
+    post_list = Post.objects.filter(
+        author__following__user=user).order_by("-pub_date")
     paginator = Paginator(post_list, 10)
     # Из URL извлекаем номер запрошенной страницы - это значение параметра page
     page_number = request.GET.get("page")
@@ -180,8 +179,8 @@ def profile_follow(request, username):
     # Подписка на автора
     author = get_object_or_404(User, username=username)
     user = request.user
-    if not Follow.objects.filter(author=author, user=user) and author != user:
-        Follow.objects.create(user=user, author=author)
+    if author != user:
+        Follow.objects.get_or_create(user=user, author=author)
     return redirect("posts:profile", username=username)
 
 
@@ -189,6 +188,5 @@ def profile_follow(request, username):
 def profile_unfollow(request, username):
     # Отписка от автора
     author = get_object_or_404(User, username=username)
-    if Follow.objects.filter(author=author, user=request.user):
-        Follow.objects.get(user=request.user, author=author).delete()
+    Follow.objects.filter(author=author, user=request.user).delete()
     return redirect("posts:profile", username=username)

@@ -68,6 +68,10 @@ class PostPagesTests(TestCase):
             first_name="Stas Basov")
         self.authorized_client = Client()
         self.authorized_client.force_login(self.user)
+        # Создаем второго авторизованного пользователя
+        self.user_2 = User.objects.create_user(username="BasStasov")
+        self.authorized_client_2 = Client()
+        self.authorized_client_2.force_login(self.user_2)
 
     # Проверка словаря контекста главной страницы (в нём передаётся список
     # постов)
@@ -174,7 +178,7 @@ class PostPagesTests(TestCase):
         self.assertEqual(first_post.image.name, "posts/small.gif")
         self.assertEqual(type(first_post.pub_date), type(dt.datetime.now()))
 
-# Проверяем, что словарь context страницы /<username>/<post_id>/
+    # Проверяем, что словарь context страницы /<username>/<post_id>/
     # содержит ожидаемые значения
     def test_username_post_id_pages_show_correct_context(self):
         """Шаблон post сформирован с правильным контекстом."""
@@ -201,12 +205,9 @@ class PostPagesTests(TestCase):
         self.assertEqual(first_response.content, second_response.content)
         self.assertNotEqual(second_response.content, third_response.content)
 
-    def test_follow_unfollow_views_working(self):
+    def test_follow_view_working(self):
         """Проверим возможность подписки на другого
-        пользователя и отписки от него"""
-        self.user_2 = User.objects.create_user(username="BasStasov")
-        self.authorized_client_2 = Client()
-        self.authorized_client_2.force_login(self.user_2)
+        пользователя"""
         # Проверяем отсутствие записей в таблице БД Follow
         self.assertFalse(Follow.objects.all())
         # Подписываем StasBasov на BasStasov
@@ -215,6 +216,15 @@ class PostPagesTests(TestCase):
                     kwargs={"username": "BasStasov"}))
         # Проверяем наличие записей в таблице БД Follow
         self.assertTrue(Follow.objects.all())
+
+    def test_unfollow_view_working(self):
+        """Проверим возможность отписки от автора"""
+        # Проверяем отсутствие записей в таблице БД Follow
+        self.assertFalse(Follow.objects.all())
+        # Подписываем StasBasov на BasStasov
+        self.authorized_client.get(
+            reverse("posts:profile_follow",
+                    kwargs={"username": "BasStasov"}))
         # Отписываем StasBasov от BasStasov
         self.authorized_client.get(
             reverse("posts:profile_unfollow",
@@ -222,48 +232,49 @@ class PostPagesTests(TestCase):
         # Проверяем отсутствие записей в таблице БД Follow
         self.assertFalse(Follow.objects.all())
 
-    def test_post_exist_in_follow_index_page_or_not(self):
+    def test_new_post_in_followers_follow_index_page(self):
         """В ленте подписавшегося пользователя новый пост
-        появляется а в ленте не подписавшегося нет"""
-        # Создадим двух авторизованных пользователей
-        self.user_2 = User.objects.create_user(username="BasStasov")
-        self.authorized_client_2 = Client()
-        self.authorized_client_2.force_login(self.user_2)
-        self.user_3 = User.objects.create_user(username="AssofBasskov")
-        self.authorized_client_3 = Client()
-        self.authorized_client_3.force_login(self.user_3)
-        # Проверим отсутствие постов в лентах обоих
-        response_1 = self.authorized_client_2.get(
+        появляется"""
+        # Проверим отсутствие постов в ленте у BasStasov
+        response = self.authorized_client_2.get(
             reverse("posts:follow_index"))
-        self.assertFalse(response_1.context["page"])
-        response_2 = self.authorized_client_3.get(
-            reverse("posts:follow_index"))
-        self.assertFalse(response_2.context["page"])
+        self.assertFalse(response.context["page"])
         # Подписываем BasStasov на StasBasov
         self.authorized_client_2.get(
             reverse("posts:profile_follow",
                     kwargs={"username": "StasBasov"}))
         # Создадим пост с авторством StasBasov
         post = Post.objects.create(text="Проверка ленты", author_id=1)
-        # Проверим отсутствие постов в ленте неподписавшегося
-        # и наличие нового поста в ленте подписавшегося
-        response_1 = self.authorized_client_2.get(
+        # Проверим наличие нового поста в ленте подписавшегося
+        response = self.authorized_client_2.get(
             reverse("posts:follow_index"))
-        self.assertIn(post, response_1.context["page"])
-        response_2 = self.authorized_client_3.get(
-            reverse("posts:follow_index"))
-        self.assertFalse(response_2.context["page"])
+        self.assertIn(post, response.context["page"])
 
-    def test_add_cooment_page_is_avialable_or_not(self):
-        """Доступность комментирования авторизованному и
-        недоступность неавторизованному пользователям"""
-        # Создадим неавторизованного пользователя
+    def test_new_post_not_in_not_followers_follow_index_page(self):
+        """В ленте неподписавшегося пользователя новый пост
+        не появляется"""
+        # Проверим отсутствие постов в ленте у BasStasov
+        response = self.authorized_client_2.get(
+            reverse("posts:follow_index"))
+        self.assertFalse(response.context["page"])
+        # Создадим пост с авторством StasBasov
+        post = Post.objects.create(text="Проверка ленты", author_id=1)
+        # Проверим отстутствие нового поста в ленте подписавшегося
+        response = self.authorized_client_2.get(
+            reverse("posts:follow_index"))
+        self.assertNotIn(post, response.context["page"])
+
+    def test_add_comment_page_is_not_avialable_for_anonimous(self):
+        """Недоступность комментирования невторизованному пользователю"""
         self.anonimous_client = Client()
         # Недоступность страницы комментирования анонимному пользователю
         response = self.anonimous_client.get(
             reverse("posts:add-comment",
                     kwargs={"username": "StasBasov", "post_id": 1}))
         self.assertNotEqual(response.status_code, 200)
+
+    def test_add_cooment_page_is_avialable_for_authorized(self):
+        """Доступность комментирования авторизованному пользователю"""
         # Доступность комментирования авторизованному пользователю
         response = self.authorized_client.get(
             reverse("posts:add-comment",

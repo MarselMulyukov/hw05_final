@@ -22,14 +22,7 @@ class PostFormTests(TestCase):
         settings.MEDIA_ROOT = tempfile.mkdtemp(dir=settings.BASE_DIR)
         # Создаем форму, если нужна проверка атрибутов
         cls.form = PostForm()
-
-    @classmethod
-    def tearDownClass(cls):
-        shutil.rmtree(settings.MEDIA_ROOT, ignore_errors=True)
-        super().tearDownClass()
-
-    def setUp(self):
-        small_gif = (
+        cls.small_gif = (
             b'\x47\x49\x46\x38\x39\x61\x02\x00'
             b'\x01\x00\x80\x00\x00\x00\x00\x00'
             b'\xFF\xFF\xFF\x21\xF9\x04\x00\x00'
@@ -37,16 +30,22 @@ class PostFormTests(TestCase):
             b'\x02\x00\x01\x00\x00\x02\x02\x0C'
             b'\x0A\x00\x3B'
         )
-        global uploaded
-        uploaded = SimpleUploadedFile(
-            name='small.gif',
-            content=small_gif,
-            content_type='image/gif'
-        )
+
+    @classmethod
+    def tearDownClass(cls):
+        shutil.rmtree(settings.MEDIA_ROOT, ignore_errors=True)
+        super().tearDownClass()
+
+    def setUp(self):
         # Создаем авторизованный клиент
         self.user = User.objects.create_user(username='StasBasov')
         self.authorized_client = Client()
         self.authorized_client.force_login(self.user)
+        self.uploaded = SimpleUploadedFile(
+            name='small.gif',
+            content=self.small_gif,
+            content_type='image/gif'
+        )
 
     def test_create_post(self):
         """Валидная форма создает запись в Post."""
@@ -54,7 +53,7 @@ class PostFormTests(TestCase):
         posts_count = Post.objects.count()
         form_data = {
             'text': 'Тестовый текст',
-            'image': uploaded,
+            'image': self.uploaded,
         }
         # Отправляем POST-запрос
         response = self.authorized_client.post(
@@ -66,32 +65,39 @@ class PostFormTests(TestCase):
         self.assertRedirects(response, reverse('posts:index'))
         # Проверяем, увеличилось ли число постов
         self.assertEqual(Post.objects.count(), posts_count + 1)
-        # Проверяем, что создалась запись с нашим слагом
+        # Проверяем, что создалась запись с нашей картинкой
         self.assertTrue(Post.objects.filter(image="posts/small.gif").exists())
 
     def test_edit_post(self):
         """Валидная форма изменяет запись в Post."""
         # Создаем пост
-        Post.objects.create(text='Тестовый текст', author=self.user)
+        form_data = {
+            'text': 'тестовый текст',
+        }
+        response = self.authorized_client.post(
+            reverse('posts:new-post'),
+            data=form_data,
+            follow=True
+        )
         # Подсчитаем количество записей в Post
         posts_count = Post.objects.count()
         form_data = {
             'text': 'Отредактированный тестовый текст',
-            'image': uploaded,
+            'image': self.uploaded,
         }
         # Отправляем POST-запрос
         response = self.authorized_client.post(
             reverse('posts:post-edit',
-                    kwargs={'username': self.user, 'post_id': 1}),
+                    kwargs={'username': self.user.username, 'post_id': 1}),
             data=form_data,
             follow=True
         )
-        # Проверяем, сработал ли редирект
-        self.assertRedirects(response, reverse(
-            'posts:post',
-            kwargs={'username': self.user, 'post_id': 1}))
         # Проверяем, что число постов не изменилось
         self.assertEqual(Post.objects.count(), posts_count)
         # Проверяем, что пост изменился
         self.assertEqual(Post.objects.get(id=1).text,
                          'Отредактированный тестовый текст')
+        # Проверяем, сработал ли редирект
+        self.assertRedirects(response, reverse(
+            'posts:post',
+            kwargs={'username': self.user, 'post_id': 1}))
